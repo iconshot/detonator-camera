@@ -1,6 +1,6 @@
 {
   "name": "@detonator/camera",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Camera module for Detonator.",
   "repository": {
     "type": "git",
@@ -10,7 +10,8 @@
   "scripts": {
     "remove-dist": "rm -rf dist",
     "bundle-dist": "npm run remove-dist && tsc",
-    "build": "npm run bundle-dist"
+    "build": "npm run bundle-dist",
+    "prepare": "npm run build"
   },
   "keywords": [
     "camera",
