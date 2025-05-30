@@ -1,0 +1,28 @@
+{
+  "name": "@detonator/camera",
+  "version": "1.0.0",
+  "description": "Camera module for Detonator.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iconshot/detonator-camera.git"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "remove-dist": "rm -rf dist",
+    "bundle-dist": "npm run remove-dist && tsc",
+    "build": "npm run bundle-dist"
+  },
+  "keywords": [
+    "camera",
+    "detonator",
+    "untrue"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "detonator": "^1.6.1",
+    "untrue": "^5.15.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
