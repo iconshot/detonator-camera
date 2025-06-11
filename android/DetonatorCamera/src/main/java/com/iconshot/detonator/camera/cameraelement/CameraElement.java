@@ -321,6 +321,18 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
 
         processedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out);
 
+        // delete original
+
+        originalFile.delete();
+
+        // create CameraMedia
+
+        CameraMedia media = new CameraMedia();
+
+        media.source = "file://" + processedFile.getAbsolutePath();
+        media.width = processedBitmap.getWidth();
+        media.height = processedBitmap.getHeight();
+
         // clean up
 
         out.flush();
@@ -328,18 +340,6 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
 
         originalBitmap.recycle();
         processedBitmap.recycle();
-
-        // delete original
-
-        originalFile.delete();
-
-        // return CameraMedia
-
-        CameraMedia media = new CameraMedia();
-
-        media.source = "file://" + processedFile.getAbsolutePath();
-        media.width = processedBitmap.getWidth();
-        media.height = processedBitmap.getHeight();
 
         return media;
     }
@@ -434,6 +434,22 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
         activeRecording.stop();
 
         activeRecording = null;
+    }
+
+    @Override
+    protected void removeView() {
+        if (activeRecording != null) {
+            activeRecording.stop();
+        }
+
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+
+        activeRecording = null;
+        cameraProvider = null;
+        imageCapture = null;
+        videoCapture = null;
     }
 
     protected static class Attributes extends Element.Attributes {

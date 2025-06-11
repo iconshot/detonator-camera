@@ -5,15 +5,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.iconshot.detonator.Detonator;
 import com.iconshot.detonator.helpers.ContextHelper;
 import com.iconshot.detonator.request.Request;
 
-public class CameraRequestPermissionRequest extends Request {
-    public CameraRequestPermissionRequest(Detonator detonator, IncomingRequest incomingRequest) {
+public class CameraRequestPermissionsRequest extends Request {
+    public CameraRequestPermissionsRequest(Detonator detonator, IncomingRequest incomingRequest) {
         super(detonator, incomingRequest);
     }
 

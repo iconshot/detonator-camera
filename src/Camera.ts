@@ -40,9 +40,9 @@ export class Camera extends BaseView<CameraProps> {
     return $("com.iconshot.detonator.camera", attributes, children);
   }
 
-  public static async requestPermission(): Promise<boolean> {
+  public static async requestPermissions(): Promise<boolean> {
     return await Detonator.request({
-      name: "com.iconshot.detonator.camera::requestPermission",
+      name: "com.iconshot.detonator.camera::requestPermissions",
     });
   }
 }

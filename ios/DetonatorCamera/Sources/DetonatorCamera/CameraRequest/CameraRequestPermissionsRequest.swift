@@ -2,7 +2,7 @@ import AVFoundation
 
 import Detonator
 
-class CameraRequestPermissionRequest: Request {
+class CameraRequestPermissionsRequest: Request {
     override func run() -> Void {
         let cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
         let microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)

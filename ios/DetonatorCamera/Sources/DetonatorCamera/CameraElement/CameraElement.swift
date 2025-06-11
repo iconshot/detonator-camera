@@ -16,12 +16,19 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
     
     private var currentBack: Bool = false
     
+    private var removing: Bool = false
+    
+    private var audioInput: AVCaptureDeviceInput?
+        
     override public func decodeAttributes() -> CameraAttributes? {
         return super.decodeAttributes()
     }
     
     override public func createView() -> CameraView {
         let view = CameraView()
+        
+        captureSession.usesApplicationAudioSession = true
+        captureSession.automaticallyConfiguresApplicationAudioSession = false
         
         if captureSession.canAddOutput(photoOutput) {
             captureSession.addOutput(photoOutput)
@@ -79,20 +86,7 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
             return
         }
         
-        guard let microphoneDevice = AVCaptureDevice.default(for: .audio) else {
-            return
-        }
-        
-        guard let audioInput = try? AVCaptureDeviceInput(device: microphoneDevice) else {
-            return
-        }
-        
-        if !captureSession.canAddInput(audioInput) {
-            return
-        }
-        
         captureSession.addInput(videoInput)
-        captureSession.addInput(audioInput)
         
         DispatchQueue.global(qos: .userInitiated).async {
             self.captureSession.startRunning()
@@ -121,6 +115,10 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         let photoCaptureCallback = self.photoCaptureCallback!
         
         self.photoCaptureCallback = nil
+        
+        if removing {
+            cleanup()
+        }
         
         if let error = error {
             photoCaptureCallback(.failure(NSError(domain: "com.iconshot.detonator.camera.cameraelement", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unknown error."])))
@@ -188,7 +186,16 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         
         let fileURL = directory.appendingPathComponent(fileName)
 
-        movieOutput.startRecording(to: fileURL, recordingDelegate: self)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            try? audioSession.setCategory(.playAndRecord, options: [.defaultToSpeaker, .mixWithOthers])
+            try? audioSession.setActive(true)
+            
+            self.addAudioInput()
+            
+            self.movieOutput.startRecording(to: fileURL, recordingDelegate: self)
+        }
     }
     
     public func stopRecording() throws -> Void {
@@ -196,7 +203,55 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
             throw NSError(domain: "com.iconshot.detonator.camera.cameraelement", code: -1, userInfo: [NSLocalizedDescriptionKey: "No active recording to stop."])
         }
         
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.stopCameraRecording()
+        }
+    }
+    
+    private func stopCameraRecording() -> Void {
         movieOutput.stopRecording()
+        
+        let audioSession = AVAudioSession.sharedInstance()
+        
+        try? audioSession.setActive(false)
+        
+        removeAudioInput()
+    }
+    
+    private func addAudioInput() -> Void {
+        guard let microphoneDevice = AVCaptureDevice.default(for: .audio) else {
+            return
+        }
+        
+        guard let audioInput = try? AVCaptureDeviceInput(device: microphoneDevice) else {
+            return
+        }
+        
+        self.audioInput = audioInput
+        
+        if !captureSession.canAddInput(audioInput) {
+            return
+        }
+        
+        captureSession.beginConfiguration()
+        
+        captureSession.addInput(audioInput)
+        
+        captureSession.commitConfiguration()
+    }
+    
+    private func removeAudioInput() -> Void {
+        guard let audioInput = audioInput else {
+            return
+        }
+        
+        captureSession.beginConfiguration()
+        
+        captureSession.removeInput(audioInput)
+        
+        captureSession.commitConfiguration()
+        
+        self.audioInput = nil
     }
     
     func fileOutput(
@@ -208,6 +263,10 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         let movieCaptureCallback = self.movieCaptureCallback!
         
         self.movieCaptureCallback = nil
+        
+        if removing {
+            cleanup()
+        }
         
         if let error = error {
             movieCaptureCallback(.failure(NSError(domain: "com.iconshot.detonator.camera.cameraelement", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unknown error."])))
@@ -235,6 +294,44 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         )
         
         movieCaptureCallback(.success(media))
+    }
+    
+    private func cleanup() -> Void {
+        if photoCaptureCallback != nil {
+            return
+        }
+        
+        if movieCaptureCallback != nil {
+            return
+        }
+                
+        if captureSession.isRunning {
+            captureSession.stopRunning()
+        }
+
+        for input in captureSession.inputs {
+            captureSession.removeInput(input)
+        }
+
+        for output in captureSession.outputs {
+            captureSession.removeOutput(output)
+        }
+
+        DispatchQueue.main.async {
+            self.previewLayer.session = nil
+        }
+    }
+    
+    override func removeView() -> Void {
+        removing = true
+                
+        if movieOutput.isRecording {
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.stopCameraRecording()
+            }
+        }
+        
+        cleanup()
     }
     
     class CameraAttributes: Attributes {
