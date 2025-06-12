@@ -1,6 +1,6 @@
 {
   "name": "@detonator/camera",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Camera module for Detonator.",
   "repository": {
     "type": "git",
