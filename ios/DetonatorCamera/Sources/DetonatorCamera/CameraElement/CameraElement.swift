@@ -189,7 +189,7 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         DispatchQueue.global(qos: .userInitiated).async {
             let audioSession = AVAudioSession.sharedInstance()
             
-            try? audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetooth, .mixWithOthers])
+            try? audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP, .mixWithOthers])
             try? audioSession.setActive(true)
             
             self.addAudioInput()
