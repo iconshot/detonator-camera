@@ -1,36 +1,11 @@
 package com.iconshot.detonator.camera.cameraelement;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Path;
 import android.graphics.RectF;
-import android.view.Display;
-import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
-
-import androidx.camera.core.CameraSelector;
-import androidx.camera.core.ImageCapture;
-import androidx.camera.core.Preview;
-import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.video.FileOutputOptions;
-import androidx.camera.video.Quality;
-import androidx.camera.video.QualitySelector;
-import androidx.camera.video.Recorder;
-import androidx.camera.video.Recording;
-import androidx.camera.video.VideoCapture;
-import androidx.camera.video.VideoRecordEvent;
-import androidx.camera.view.PreviewView;
-import androidx.core.content.ContextCompat;
-import androidx.core.util.Consumer;
-import androidx.lifecycle.LifecycleOwner;
-
-import com.google.common.util.concurrent.ListenableFuture;
-import com.iconshot.detonator.helpers.ContextHelper;
-
-import java.io.File;
 
 public class CameraView extends ViewGroup {
     private float[] radii;

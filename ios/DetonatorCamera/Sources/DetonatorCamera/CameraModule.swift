@@ -1,7 +1,7 @@
 import Detonator
 
 public class CameraModule: Module {
-    override public func register() -> Void {
+    override public func setUp() -> Void {
         detonator.setElementClass("com.iconshot.detonator.camera", CameraElement.self)
         
         detonator.setRequestClass("com.iconshot.detonator.camera::requestPermissions", CameraRequestPermissionsRequest.self)

@@ -39,7 +39,6 @@ import com.iconshot.detonator.Detonator;
 import com.iconshot.detonator.camera.CameraMedia;
 import com.iconshot.detonator.element.Element;
 import com.iconshot.detonator.helpers.CompareHelper;
-import com.iconshot.detonator.helpers.ContextHelper;
 import com.iconshot.detonator.layout.ViewLayout;
 
 public class CameraElement extends Element<CameraView, CameraElement.Attributes> {
@@ -65,7 +64,7 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
 
     @Override
     protected CameraView createView() {
-        Context context = ContextHelper.context;
+        Context context = detonator.context;
 
         CameraView cameraView = new CameraView(context);
 
@@ -165,7 +164,7 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
             return;
         }
 
-        Context context = ContextHelper.context;
+        Context context = detonator.context;
 
         if (!(context instanceof LifecycleOwner)) {
             return;
@@ -219,7 +218,7 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
             return;
         }
 
-        Context context = ContextHelper.context;
+        Context context = detonator.context;
 
         File directory = new File(context.getCacheDir(), "com.iconshot.detonator.camera");
 
@@ -358,7 +357,7 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
             return;
         }
 
-        Context context = ContextHelper.context;
+        Context context = detonator.context;
 
         File directory = new File(context.getCacheDir(), "com.iconshot.detonator.camera");
 

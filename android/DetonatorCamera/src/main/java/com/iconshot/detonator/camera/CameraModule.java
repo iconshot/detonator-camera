@@ -15,7 +15,7 @@ public class CameraModule extends Module {
     }
 
     @Override
-    public void register() {
+    public void setUp() {
         detonator.setElementClass("com.iconshot.detonator.camera", CameraElement.class);
 
         detonator.setRequestClass("com.iconshot.detonator.camera::requestPermissions", CameraRequestPermissionsRequest.class);
