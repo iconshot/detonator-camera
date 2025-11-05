@@ -25,7 +25,11 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
     }
     
     override public func createView() -> CameraView {
-        let view = CameraView()
+        return CameraView()
+    }
+    
+    override func setUpView() -> Void {
+        let view = view as! CameraView
         
         captureSession.usesApplicationAudioSession = true
         captureSession.automaticallyConfiguresApplicationAudioSession = false
@@ -42,7 +46,80 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         
         view.previewLayer = previewLayer
         
-        return view
+        setRequestListener("com.iconshot.detonator.camera::takePhoto") { promise, value in
+            if self.photoCaptureCallback != nil {
+                promise.reject("Already capturing.")
+                
+                return
+            }
+
+            self.photoCaptureCallback = { result in
+                switch result {
+                case .success(let media):
+                    promise.resolve(media)
+                case .failure(let error):
+                    promise.reject(error)
+                }
+            }
+        
+            let settings = AVCapturePhotoSettings()
+        
+            self.photoOutput.capturePhoto(with: settings, delegate: self)
+        }
+        
+        setRequestListener("com.iconshot.detonator.camera::startRecording") { promise, value in
+            if self.movieCaptureCallback != nil {
+                promise.reject("Already capturing.")
+                
+                return
+            }
+            
+            self.movieCaptureCallback = { result in
+                switch result {
+                case .success(let media):
+                    promise.resolve(media)
+                case .failure(let error):
+                    promise.reject(error)
+                }
+            }
+            
+            let fileManager = FileManager.default
+            
+            let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            
+            let directory = cacheDirectory.appendingPathComponent("com.iconshot.detonator.camera", isDirectory: true)
+            
+            if !fileManager.fileExists(atPath: directory.path) {
+                try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+            }
+
+            let fileName = UUID().uuidString + ".mov"
+            
+            let fileURL = directory.appendingPathComponent(fileName)
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let audioSession = AVAudioSession.sharedInstance()
+                
+                try? audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP, .mixWithOthers])
+                try? audioSession.setActive(true)
+                
+                self.addAudioInput()
+                
+                self.movieOutput.startRecording(to: fileURL, recordingDelegate: self)
+            }
+        }
+        
+        setRequestListener("com.iconshot.detonator.camera::stopRecording") { promise, value in
+            if self.movieCaptureCallback == nil {
+                promise.reject("No active recording to stop.")
+                
+                return
+            }
+            
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.stopCameraRecording()
+            }
+        }
     }
     
     override public func patchView() -> Void {
@@ -93,18 +170,50 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         }
     }
     
-    func takePhoto(callback: @escaping (Result<CameraMedia, Error>) -> Void) -> Void {
-        if photoCaptureCallback != nil {
-            callback(.failure(NSError(domain: "com.iconshot.detonator.camera.cameraelement", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already capturing."])))
-            
+    private func stopCameraRecording() -> Void {
+        movieOutput.stopRecording()
+        
+        let audioSession = AVAudioSession.sharedInstance()
+        
+        try? audioSession.setActive(false)
+        
+        removeAudioInput()
+    }
+    
+    private func addAudioInput() -> Void {
+        guard let microphoneDevice = AVCaptureDevice.default(for: .audio) else {
             return
         }
-
-        photoCaptureCallback = callback
+        
+        guard let audioInput = try? AVCaptureDeviceInput(device: microphoneDevice) else {
+            return
+        }
+        
+        self.audioInput = audioInput
+        
+        if !captureSession.canAddInput(audioInput) {
+            return
+        }
+        
+        captureSession.beginConfiguration()
+        
+        captureSession.addInput(audioInput)
+        
+        captureSession.commitConfiguration()
+    }
     
-        let settings = AVCapturePhotoSettings()
-    
-        photoOutput.capturePhoto(with: settings, delegate: self)
+    private func removeAudioInput() -> Void {
+        guard let audioInput = audioInput else {
+            return
+        }
+        
+        captureSession.beginConfiguration()
+        
+        captureSession.removeInput(audioInput)
+        
+        captureSession.commitConfiguration()
+        
+        self.audioInput = nil
     }
     
     func photoOutput(
@@ -161,97 +270,6 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         } catch {
             photoCaptureCallback(.failure(error))
         }
-    }
-    
-    public func startRecording(callback: @escaping (Result<CameraMedia, Error>) -> Void) -> Void {
-        if movieCaptureCallback != nil {
-            callback(.failure(NSError(domain: "com.iconshot.detonator.camera.cameraelement", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already capturing."])))
-            
-            return
-        }
-        
-        movieCaptureCallback = callback
-        
-        let fileManager = FileManager.default
-        
-        let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        
-        let directory = cacheDirectory.appendingPathComponent("com.iconshot.detonator.camera", isDirectory: true)
-        
-        if !fileManager.fileExists(atPath: directory.path) {
-            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
-        }
-
-        let fileName = UUID().uuidString + ".mov"
-        
-        let fileURL = directory.appendingPathComponent(fileName)
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let audioSession = AVAudioSession.sharedInstance()
-            
-            try? audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP, .mixWithOthers])
-            try? audioSession.setActive(true)
-            
-            self.addAudioInput()
-            
-            self.movieOutput.startRecording(to: fileURL, recordingDelegate: self)
-        }
-    }
-    
-    public func stopRecording() throws -> Void {
-        if movieCaptureCallback == nil {
-            throw NSError(domain: "com.iconshot.detonator.camera.cameraelement", code: -1, userInfo: [NSLocalizedDescriptionKey: "No active recording to stop."])
-        }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            self.stopCameraRecording()
-        }
-    }
-    
-    private func stopCameraRecording() -> Void {
-        movieOutput.stopRecording()
-        
-        let audioSession = AVAudioSession.sharedInstance()
-        
-        try? audioSession.setActive(false)
-        
-        removeAudioInput()
-    }
-    
-    private func addAudioInput() -> Void {
-        guard let microphoneDevice = AVCaptureDevice.default(for: .audio) else {
-            return
-        }
-        
-        guard let audioInput = try? AVCaptureDeviceInput(device: microphoneDevice) else {
-            return
-        }
-        
-        self.audioInput = audioInput
-        
-        if !captureSession.canAddInput(audioInput) {
-            return
-        }
-        
-        captureSession.beginConfiguration()
-        
-        captureSession.addInput(audioInput)
-        
-        captureSession.commitConfiguration()
-    }
-    
-    private func removeAudioInput() -> Void {
-        guard let audioInput = audioInput else {
-            return
-        }
-        
-        captureSession.beginConfiguration()
-        
-        captureSession.removeInput(audioInput)
-        
-        captureSession.commitConfiguration()
-        
-        self.audioInput = nil
     }
     
     func fileOutput(
@@ -324,7 +342,7 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
     
     override func removeView() -> Void {
         removing = true
-                
+        
         if movieOutput.isRecording {
             DispatchQueue.global(qos: .userInitiated).async {
                 self.stopCameraRecording()
@@ -348,6 +366,12 @@ class CameraElement: Element, AVCapturePhotoCaptureDelegate, AVCaptureFileOutput
         private enum CodingKeys: String, CodingKey {
             case back
         }
+    }
+    
+    public struct CameraMedia: Encodable {
+        var source: String
+        var width: Int
+        var height: Int
     }
 }
  

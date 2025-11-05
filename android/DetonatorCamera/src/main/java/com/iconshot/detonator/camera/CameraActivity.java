@@ -1,4 +1,4 @@
-package com.iconshot.detonator.camera.camerarequest;
+package com.iconshot.detonator.camera;
 
 import android.Manifest;
 import android.app.Activity;
@@ -11,7 +11,6 @@ import androidx.core.app.ActivityCompat;
 import java.util.function.Consumer;
 
 public class CameraActivity extends Activity {
-
     public static Consumer<Boolean> permissionResultCallback;
 
     @Override

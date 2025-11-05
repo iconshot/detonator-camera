@@ -1,4 +1,4 @@
-import $ from "untrue";
+import $, { Ref } from "untrue";
 
 import Detonator, { BaseView, ViewProps } from "detonator";
 
@@ -13,36 +13,57 @@ export interface CameraProps extends ViewProps {
 }
 
 export class Camera extends BaseView<CameraProps> {
+  private elementRef: Ref<Element> = new Ref();
+
   public async takePhoto(): Promise<CameraMedia> {
-    return await Detonator.request(
-      { name: "com.iconshot.detonator.camera::takePhoto" },
-      this
-    );
+    const element = this.elementRef.value;
+
+    if (element === null) {
+      throw new Error("Camera element is not mounted.");
+    }
+
+    return await Detonator.request("com.iconshot.detonator.camera::takePhoto")
+      .withEdge(element)
+      .fetchAndDecode();
   }
 
   public async startRecording(): Promise<CameraMedia> {
+    const element = this.elementRef.value;
+
+    if (element === null) {
+      throw new Error("Camera element is not mounted.");
+    }
+
     return await Detonator.request(
-      { name: "com.iconshot.detonator.camera::startRecording" },
-      this
-    );
+      "com.iconshot.detonator.camera::startRecording"
+    )
+      .withEdge(element)
+      .fetchAndDecode();
   }
 
   public async stopRecording(): Promise<void> {
-    await Detonator.request(
-      { name: "com.iconshot.detonator.camera::stopRecording" },
-      this
-    );
+    const element = this.elementRef.value;
+
+    if (element === null) {
+      throw new Error("Camera element is not mounted.");
+    }
+
+    await Detonator.request("com.iconshot.detonator.camera::stopRecording")
+      .withEdge(element)
+      .fetch();
   }
 
   public render(): any {
     const { children, ...attributes } = this.props;
 
-    return $("com.iconshot.detonator.camera", attributes, children);
+    const tmpAttributes = { ...attributes, ref: this.elementRef };
+
+    return $("com.iconshot.detonator.camera", tmpAttributes, children);
   }
 
   public static async requestPermissions(): Promise<boolean> {
-    return await Detonator.request({
-      name: "com.iconshot.detonator.camera::requestPermissions",
-    });
+    return await Detonator.request(
+      "com.iconshot.detonator.camera::requestPermissions"
+    ).fetchAndDecode();
   }
 }

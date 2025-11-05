@@ -36,7 +36,6 @@ import androidx.lifecycle.LifecycleOwner;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import com.iconshot.detonator.Detonator;
-import com.iconshot.detonator.camera.CameraMedia;
 import com.iconshot.detonator.element.Element;
 import com.iconshot.detonator.helpers.CompareHelper;
 import com.iconshot.detonator.layout.ViewLayout;
@@ -64,15 +63,159 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
 
     @Override
     protected CameraView createView() {
-        Context context = detonator.context;
+        return new CameraView(detonator.context);
+    }
 
-        CameraView cameraView = new CameraView(context);
+    @Override
+    @SuppressLint("MissingPermission")
+    protected void setUpView() {
+        previewView = new PreviewView(detonator.context);
 
-        previewView = new PreviewView(context);
+        view.addView(previewView);
 
-        cameraView.addView(previewView);
+        setRequestListener("com.iconshot.detonator.camera::takePhoto", (promise, value) -> {
+            if (imageCapture == null) {
+                promise.reject("imageCapture is null.");
 
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
+                return;
+            }
+
+            File directory = new File(detonator.context.getCacheDir(), "com.iconshot.detonator.camera");
+
+            String fileName = UUID.randomUUID().toString() + ".jpg";
+
+            if (!directory.exists()) {
+                directory.mkdirs();
+            }
+
+            File file = new File(directory, fileName);
+
+            ImageCapture.OutputFileOptions options = new ImageCapture.OutputFileOptions.Builder(file)
+                    .build();
+
+            ImageCapture.OnImageSavedCallback onImageSavedCallback = new ImageCapture.OnImageSavedCallback() {
+                @Override
+                public void onImageSaved(@NonNull ImageCapture.OutputFileResults output) {
+                    String path = output.getSavedUri().getPath();
+
+                    try {
+                        CameraMedia media = processPhoto(path);
+
+                        promise.resolve(media);
+                    } catch (Exception e) {
+                        promise.reject("Error processing photo.");
+                    }
+                }
+
+                @Override
+                public void onError(@NonNull ImageCaptureException exception) {
+                    promise.reject(exception);
+                }
+            };
+
+            imageCapture.takePicture(
+                    options,
+                    ContextCompat.getMainExecutor(detonator.context),
+                    onImageSavedCallback
+            );
+        });
+
+        setRequestListener("com.iconshot.detonator.camera::startRecording", (promise, value) -> {
+            if (videoCapture == null) {
+                promise.reject("videoCapture is null.");
+
+                return;
+            }
+
+            if (activeRecording != null) {
+                promise.reject("A recording is already in progress.");
+
+                return;
+            }
+
+            Context context = detonator.context;
+
+            File directory = new File(context.getCacheDir(), "com.iconshot.detonator.camera");
+
+            String fileName = UUID.randomUUID().toString() + ".mp4";
+
+            if (!directory.exists()) {
+                directory.mkdirs();
+            }
+
+            File file = new File(directory, fileName);
+
+            FileOutputOptions options = new FileOutputOptions.Builder(file).build();
+
+            Consumer<VideoRecordEvent> listener = videoRecordEvent -> {
+                if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
+                    VideoRecordEvent.Finalize finalize = (VideoRecordEvent.Finalize) videoRecordEvent;
+
+                    if (finalize.hasError()) {
+                        promise.reject("Error recording from camera.");
+
+                        return;
+                    }
+
+                    String path = finalize.getOutputResults().getOutputUri().getPath();
+
+                    CameraMedia media = new CameraMedia();
+
+                    media.source = "file://" + path;
+
+                    MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+
+                    try {
+                        retriever.setDataSource(path);
+
+                        String widthStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+                        String heightStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+                        String rotationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+
+                        int width = Integer.parseInt(widthStr);
+                        int height = Integer.parseInt(heightStr);
+                        int rotation = Integer.parseInt(rotationStr);
+
+                        if (rotation == 90 || rotation == 270) {
+                            media.width = height;
+                            media.height = width;
+                        } else {
+                            media.width = width;
+                            media.height = height;
+                        }
+
+                        promise.resolve(media);
+                    } catch (Exception exception) {
+                        promise.reject(exception);
+                    } finally {
+                        try {
+                            retriever.release();
+                        } catch (Exception e) {}
+                    }
+                }
+            };
+
+            activeRecording = videoCapture.getOutput()
+                    .prepareRecording(context, options)
+                    .withAudioEnabled()
+                    .start(ContextCompat.getMainExecutor(context), listener);
+        });
+
+        setRequestListener("com.iconshot.detonator.camera::stopRecording", (promise, value) -> {
+            if (activeRecording == null) {
+                promise.reject("No active recording to stop.");
+
+                return;
+            }
+
+            activeRecording.stop();
+
+            activeRecording = null;
+
+            promise.resolve();
+        });
+
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(detonator.context);
 
         cameraProviderFuture.addListener(() -> {
             try {
@@ -80,9 +223,7 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
 
                 startCamera();
             } catch (Exception e) {}
-        }, ContextCompat.getMainExecutor(context));
-
-        return cameraView;
+        }, ContextCompat.getMainExecutor(detonator.context));
     }
 
     @Override
@@ -211,51 +352,6 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
         } catch (Exception e) {}
     }
 
-    public void takePhoto(CaptureCallback callback) {
-        if (imageCapture == null) {
-            callback.onError(new Exception("imageCapture is null."));
-
-            return;
-        }
-
-        Context context = detonator.context;
-
-        File directory = new File(context.getCacheDir(), "com.iconshot.detonator.camera");
-
-        String fileName = UUID.randomUUID().toString() + ".jpg";
-
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-
-        File file = new File(directory, fileName);
-
-        ImageCapture.OutputFileOptions options = new ImageCapture.OutputFileOptions.Builder(file)
-                .build();
-
-        ImageCapture.OnImageSavedCallback onImageSavedCallback = new ImageCapture.OnImageSavedCallback() {
-            @Override
-            public void onImageSaved(@NonNull ImageCapture.OutputFileResults output) {
-                String path = output.getSavedUri().getPath();
-
-                try {
-                    CameraMedia media = processPhoto(path);
-
-                    callback.onEnd(media);
-                } catch (Exception e) {
-                    callback.onError(new Exception("Error processing photo."));
-                }
-            }
-
-            @Override
-            public void onError(@NonNull ImageCaptureException exception) {
-                callback.onError(exception);
-            }
-        };
-
-        imageCapture.takePicture(options, ContextCompat.getMainExecutor(context), onImageSavedCallback);
-    }
-
     private CameraMedia processPhoto(String originalPath) throws IOException {
         File originalFile = new File(originalPath);
 
@@ -343,98 +439,6 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
         return media;
     }
 
-    @SuppressLint("MissingPermission")
-    public void startRecording(CaptureCallback callback) {
-        if (videoCapture == null) {
-            callback.onError(new Exception("videoCapture is null."));
-
-            return;
-        }
-
-        if (activeRecording != null) {
-            callback.onError(new Exception("A recording is already in progress."));
-
-            return;
-        }
-
-        Context context = detonator.context;
-
-        File directory = new File(context.getCacheDir(), "com.iconshot.detonator.camera");
-
-        String fileName = UUID.randomUUID().toString() + ".mp4";
-
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-
-        File file = new File(directory, fileName);
-
-        FileOutputOptions options = new FileOutputOptions.Builder(file).build();
-
-        Consumer<VideoRecordEvent> listener = videoRecordEvent -> {
-            if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
-                VideoRecordEvent.Finalize finalize = (VideoRecordEvent.Finalize) videoRecordEvent;
-
-                if (finalize.hasError()) {
-                    callback.onError(new Exception("Error recording from camera."));
-
-                    return;
-                }
-
-                String path = finalize.getOutputResults().getOutputUri().getPath();
-
-                CameraMedia media = new CameraMedia();
-
-                media.source = "file://" + path;
-
-                MediaMetadataRetriever retriever = new MediaMetadataRetriever();
-
-                try {
-                    retriever.setDataSource(path);
-
-                    String widthStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
-                    String heightStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
-                    String rotationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
-
-                    int width = Integer.parseInt(widthStr);
-                    int height = Integer.parseInt(heightStr);
-                    int rotation = Integer.parseInt(rotationStr);
-
-                    if (rotation == 90 || rotation == 270) {
-                        media.width = height;
-                        media.height = width;
-                    } else {
-                        media.width = width;
-                        media.height = height;
-                    }
-
-                    callback.onEnd(media);
-                } catch (Exception exception) {
-                    callback.onError(exception);
-                } finally {
-                    try {
-                        retriever.release();
-                    } catch (Exception e) {}
-                }
-            }
-        };
-
-        activeRecording = videoCapture.getOutput()
-                .prepareRecording(context, options)
-                .withAudioEnabled()
-                .start(ContextCompat.getMainExecutor(context), listener);
-    }
-
-    public void stopRecording() throws Exception {
-        if (activeRecording == null) {
-            throw new Exception("No active recording to stop.");
-        }
-
-        activeRecording.stop();
-
-        activeRecording = null;
-    }
-
     @Override
     protected void removeView() {
         if (activeRecording != null) {
@@ -455,8 +459,9 @@ public class CameraElement extends Element<CameraView, CameraElement.Attributes>
         Boolean back;
     }
 
-    public interface CaptureCallback {
-        void onEnd(CameraMedia media);
-        void onError(Exception exception);
+    public static class CameraMedia {
+        public String source;
+        public int width;
+        public int height;
     }
 }
